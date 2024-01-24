@@ -7,12 +7,13 @@ cat << EOF > package.json
   "description": "",
   "main": "./dist/index.js",
   "scripts": {
-    "start": "npm run build && node ./dist/index.js",
+    "start": "node ./dist/index.js",
     "start:dev": "nodemon",
     "build": "babel src -d dist",
     "test": "jest",
     "prisma:push": "prisma db push",
-    "prisma:pull": "prisma db pull"
+    "prisma:pull": "prisma db pull",
+    "postinstall":"npx prisma generate && npm run build"
   },
   "keywords": [],
   "author": "",
@@ -51,7 +52,7 @@ cat << EOF > .eslintrc.json
 }
 EOF
 
-cat << EOF > .nodemon.json 
+cat << EOF > nodemon.json 
 {
   "execMap": {
     "js": "babel-node --extensions \".js\" src/index.js"
@@ -86,7 +87,7 @@ cat << EOF > .vscode/settings.json
   "editor.formatOnSave": true,
   "editor.tabSize": 2,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
+    "source.fixAll.eslint": "explicit"
   },
   "eslint.validate": ["javascript", "javascriptreact", "typescript", "vue"],
   "[jsonc]": {
