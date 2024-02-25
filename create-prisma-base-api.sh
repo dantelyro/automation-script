@@ -1,5 +1,9 @@
 #!/bin/sh
 
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
 echo instalando node mais atual
 nvm install --lts
 
@@ -119,7 +123,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import whitelist from './whitelist.js'
 
-const app = express()
+export const app = express()
 
 app.use(express.urlencoded({ limit: '25mb', extended: true }))
 app.use(express.json({ limit: '25mb', extended: true }))
@@ -145,7 +149,7 @@ app.get('/', (req, res) => {
 EOF
 
 cat << EOF > src/server.js
-import { app } from '../app.js'
+import { app } from './app.js'
 
 const PORT = process.env.PORT || 5000
 app.listen(PORT, () => console.log('Servidor rodando na porta 5000'))
