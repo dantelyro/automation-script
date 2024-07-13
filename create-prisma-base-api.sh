@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -25,10 +25,11 @@ cat << EOF > package.json
     "postinstall": "prisma generate",
     "test:create-prisma-environment": "npm link ./prisma/vitest-environment-prisma",
     "test:install-prisma-environment": "npm link vitest-environment-prisma",
+    "test": "vitest run --dir src/services",
+    "test:watch": "vitest --dir src/services",
     "pretest:e2e": "npm run test:create-prisma-environment && npm run test:install-prisma-environment",
-    "test": "vitest run -c vitest.unit.config.js",
-    "test:e2e": "vitest run -c vitest.e2e.config.js",
-    "test:e2e:watch": "vitest -c vitest.e2e.config.js",
+    "test:e2e": "vitest run --dir src/http/controllers",
+    "test:e2e:watch": "vitest --dir src/http/controllers",
     "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
@@ -38,13 +39,22 @@ EOF
 
 echo instalando dependencias 
 
-npm i cors express helmet jsonwebtoken dotenv
+npm i cors express helmet jsonwebtoken dotenv express-async-errors uuid
 
 npm i -D eslint eslint-config-standard eslint-plugin-import eslint-plugin-n eslint-plugin-promise vitest supertest nodemon prisma
 
-mkdir src
+npx prisma init
+
+mkdir prisma/vitest-environment-prisma
 mkdir test
 mkdir .vscode
+mkdir src
+mkdir src/auth
+mkdir src/http
+mkdir src/errors
+mkdir src/http/controllers
+mkdir src/http/middlewares
+
 
 echo criando arquivos
 
@@ -107,8 +117,6 @@ cat << EOF > .vscode/settings.json
 }
 EOF
 
-npx prisma init
-
 cat << EOF > src/prismaClient.js
 import { PrismaClient } from '@prisma/client'
 
@@ -122,6 +130,8 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import whitelist from './whitelist.js'
+
+import { appRouter } from './http/routes.js'
 
 export const app = express()
 
@@ -142,10 +152,7 @@ app.use(cors())
 app.use(helmet())
 app.use(cors(corsOptions))
 
-app.get('/', (req, res) => {
-  res.send('Olá')
-})
-
+appRouter(app)
 EOF
 
 cat << EOF > src/server.js
@@ -157,52 +164,22 @@ EOF
 
 cat << EOF > src/whitelist.js
 export default [
-  'http://localhost:5000'
+  'http://localhost:8080'
 ]
 EOF
 
-cat << EOF > vitest.config.js
+cat << EOF > vite.config.js
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  test: {}
+  test: {
+    environmentMatchGlobs: [
+      ['src/http/controllers/**', 'prisma']
+    ]
+  }
 })
-
 EOF
 
-cat << EOF > vitest.e2e.config.js
-import { defineConfig, mergeConfig } from 'vitest/config'
-import vitestConfig from './vitest.config.js'
-
-export default mergeConfig(
-  vitestConfig,
-  defineConfig({
-    test: {
-      include: ['**/*.e2e.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-      environmentMatchGlobs: [['src/**', 'prisma']]
-    }
-  })
-)
-
-
-EOF
-
-cat << EOF > vitest.unit.config.js
-import { configDefaults, defineConfig, mergeConfig } from 'vitest/config'
-import vitestConfig from './vitest.config.js'
-
-export default mergeConfig(
-  vitestConfig,
-  defineConfig({
-    test: {
-      exclude: [...configDefaults.exclude, '**/*.e2e-{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}']
-    }
-  })
-)
-
-EOF
-
-mkdir  prisma/vitest-environment-prisma
 
 cat << EOF > prisma/vitest-environment-prisma/package.json
 {
@@ -214,7 +191,6 @@ cat << EOF > prisma/vitest-environment-prisma/package.json
   "author": "",
   "license": "ISC"
 }
-
 EOF
 
 cat << EOF > prisma/vitest-environment-prisma/vitest-environment-prisma.js
@@ -257,6 +233,197 @@ export default {
     }
   }
 }
+EOF
 
 
+cat << EOF > src/errors/index.js
+class BaseError extends Error {
+  constructor (message) {
+    super()
+    this.message = message
+    this.httpCode = 500
+  }
+}
+
+export class BadRequestError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Sintaxe invalida',
+      httpCode: 400
+    })
+  }
+}
+
+export class UnauthorizedError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Usuário não autenticado.',
+      httpCode: 401
+    })
+  }
+}
+
+export class ForbiddenError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Você não possui permissão para executar esta ação.',
+      httpCode: 403
+    })
+  }
+}
+
+export class NotFoundError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Não foi possível encontrar este recurso no sistema.',
+      httpCode: 404
+    })
+  }
+}
+
+export class UnprocessableEntityError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Não foi possível realizar esta operação.',
+      httpCode: 422
+    })
+  }
+}
+
+export class TooManyRequestsError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Você realizou muitas requisições recentemente.',
+      httpCode: 429
+    })
+  }
+}
+
+export class InternalServerError extends BaseError {
+  constructor (message) {
+    super({
+      message: message || 'Um erro interno não esperado aconteceu.',
+      httpCode: 500
+    })
+  }
+}
+EOF
+
+
+cat << EOF > src/http/controllers/exemplo.js
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+export async function exemplo (req, res) {
+  res.status(200).send({ hello: 'hello world' })
+}
+EOF
+
+
+cat << EOF > src/http/routes.js
+import { errorHandler } from './middlewares/error-handler.js'
+import { exemplo } from './controllers/exemplo.js'
+
+/** @param {import('express').Application} app */
+export function appRouter (app) {
+
+  // exemplo de rota
+  app.get('/', exemplo)
+
+  // a rota abaixa deve sempre ser a ultima
+  app.use(errorHandler)
+}
+EOF
+
+
+
+cat << EOF > src/auth/jwt.js
+import pkg from 'jsonwebtoken'
+const { sign } = pkg
+
+// mude o valor abaixo para uma chave secreta mais segura
+export const secretKey = 'MySecret'
+
+/**
+ *  essa função cria um token para o usuário utilizando o id do usuário apenas modifique para seu uso
+ *  @param {Object} user
+ *  @param {number} user.iduser
+ */
+export function createToken (user) {
+  if (!user) {
+    throw new Error('usuario não informado')
+  }
+
+  // abaixo é um exemplo de payload sub por padrão recebe o id do usuario
+  // você pode adicionar mais informações ao payload
+  /** @type {import('jsonwebtoken').JwtPayload} */
+  const payload = {
+    sub: user.iduser
+  }
+
+  const token = sign(payload, secretKey, { expiresIn: '10h' })
+
+  return {
+    token
+  }
+}
+EOF
+
+cat << EOF > src/http/middlewares/verify-token.js
+import pkg from 'jsonwebtoken'
+import { secretKey } from '../../auth/jwt.js'
+const { verify } = pkg
+
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+export function verifyToken (req, res, next) {
+  const token = req.header('Authorization')
+
+  if (!token) {
+    return res.status(401).json({ message: 'Unauthorized: No token provided' })
+  }
+
+  try {
+    const decoded = verify(token.replace('Bearer ', ''), secretKey)
+
+    // toda vez que um token é verificado, o usuário é colocado no req.user
+    // verifique a propriedade req.user.sub para obter o id do usuário logado
+    req.user = { ...decoded }
+
+    next()
+  } catch (err) {
+    return res.status(401).json({ message: 'Unauthorized: Invalid token' })
+  }
+}
+EOF
+
+cat << EOF > src/http/middlewares/error-handler.js
+// import { prisma } from '../../prismaClient.js'
+// import { v4 as uuidv4 } from 'uuid'
+
+// todo que ocorrer sempre passará por esse enpoint 
+// todos os erros devem ser tratados aqui
+
+/**
+ * @type {import('express').ErrorRequestHandler}
+ */
+export async function errorHandler (err, req, res, next) {
+  // const uuid = uuidv4()
+
+  // abaixo é um exemplo de estrutura de erro no banco de dados
+  // await prisma.errorlog.create({
+  //  data: {
+  //    errorid: uuid,
+  //    errorhttpcode: err?.httpCode || 500,
+  //    errorinstance: err.name,
+  //    errormessage: err.message,
+  //    errorstack: err?.stack
+  //  }
+  // })
+
+  res.status(err.httpCode || 500).send({ message: err.message })
+}
 EOF
